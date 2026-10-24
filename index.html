@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="vi"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kiểm tra Tiếng Anh 10A2</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--tx:#1b1e2b;--mu:#6b7085;--ac:#4f46e5;--ok:#16a34a;--no:#dc2626;--bd:#e3e5ee}
+@media(prefers-color-scheme:dark){:root{--bg:#12141d;--card:#1c1f2d;--tx:#eceef7;--mu:#9aa0b8;--ac:#818cf8;--bd:#2c3044}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.5 system-ui,sans-serif}
+main{max-width:520px;margin:0 auto;padding:16px}h1{font-size:22px}h2{font-size:17px;margin:0 0 8px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:14px}
+.mu{color:var(--mu);font-size:14px}.hide{display:none}
+button{font:inherit;border:0;border-radius:10px;padding:12px 16px;background:var(--ac);color:#fff;width:100%;cursor:pointer}
+button:disabled{opacity:.45}.opt{background:var(--bg);color:var(--tx);border:1px solid var(--bd);text-align:left;margin-top:8px}
+.opt.ok{background:var(--ok);color:#fff}.opt.no{background:var(--no);color:#fff}
+table{width:100%;border-collapse:collapse}td,th{padding:7px 4px;border-bottom:1px solid var(--bd);text-align:left}
+.bar{height:6px;background:var(--bd);border-radius:3px;margin-bottom:12px}.bar i{display:block;height:100%;background:var(--ac)}
+</style></head><body><main>
+<h1>Kiểm tra Tiếng Anh 10A2</h1>
+
+<div id="login" class="card"><p class="mu">Đăng nhập bằng Google để làm bài.</p><button id="gbtn">Đăng nhập bằng Google</button></div>
+
+<div id="home" class="card hide">
+  <h2 id="hello"></h2><p class="mu" id="left"></p>
+  <button id="start">Bắt đầu làm bài</button>
+  <p><a href="#" id="out" class="mu">Đăng xuất</a></p>
+</div>
+
+<div id="quiz" class="card hide"><div class="bar"><i id="prog" style="width:0"></i></div><h2 id="q"></h2><div id="opts"></div></div>
+
+<div id="result" class="card hide"><h2 id="score"></h2><p class="mu" id="time"></p><button id="back">Về trang chính</button></div>
+
+<div id="lbcard" class="card hide"><h2>Bảng xếp hạng</h2>
+<table><thead><tr><th>#</th><th>Tên</th><th>Điểm</th><th>Giây</th></tr></thead><tbody id="lb"></tbody></table></div>
+
+<div id="teacher" class="card hide"><h2>Cô giáo: số lần làm hôm nay</h2><table><tbody id="tl"></tbody></table></div>
+
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {getFirestore,collection,doc,setDoc,getDocs,query,limit} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// ====== 1. DÁN CẤU HÌNH FIREBASE CỦA BẠN VÀO ĐÂY ======
+const firebaseConfig = {
+  apiKey: "DÁN_VÀO_ĐÂY",
+  authDomain: "DÁN_VÀO_ĐÂY",
+  projectId: "DÁN_VÀO_ĐÂY",
+  appId: "DÁN_VÀO_ĐÂY"
+};
+// ====== 2. EMAIL CỦA CÔ GIÁO / ADMIN (xem được số lần làm của cả lớp) ======
+const ADMINS = ["email.cua.co@gmail.com"];
+const LIMIT = 3;
+// ====== 3. CÂU HỎI (a = vị trí đáp án đúng, bắt đầu từ 0) ======
+const QS = [
+ {q:"She ___ to school every day.",o:["go","goes","going","gone"],a:1},
+ {q:"They ___ football when it started to rain.",o:["play","played","were playing","are playing"],a:2},
+ {q:"Choose the synonym of “big”:",o:["tiny","huge","narrow","quiet"],a:1},
+ {q:"If I ___ rich, I would travel the world.",o:["am","was","were","be"],a:2},
+ {q:"I have lived here ___ 2020.",o:["for","since","from","in"],a:1}
+];
+
+const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
+const $=id=>document.getElementById(id);
+const today=()=>{const d=new Date();return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate()};
+const esc=s=>{const d=document.createElement("div");d.textContent=s;return d.innerHTML};
+let me,rows=[],i=0,right=0,t0=0;
+const view=id=>["login","home","quiz","result"].forEach(x=>$(x).classList.toggle("hide",x!==id));
+
+async function load(){
+  const s=await getDocs(query(collection(db,"attempts"),limit(1000)));
+  rows=s.docs.map(d=>d.data());
+  const best={};
+  rows.forEach(r=>{const b=best[r.uid];if(!b||r.score>b.score||(r.score===b.score&&r.sec<b.sec))best[r.uid]=r});
+  const lb=Object.values(best).sort((a,b)=>b.score-a.score||a.sec-b.sec).slice(0,20);
+  $("lb").innerHTML=lb.map((r,n)=>`<tr><td>${n+1}</td><td>${esc(r.name)}${r.uid===me.uid?" (bạn)":""}</td><td>${r.score}/${QS.length}</td><td>${r.sec}</td></tr>`).join("")||'<tr><td colspan="4" class="mu">Chưa có ai làm bài</td></tr>';
+  $("lbcard").classList.remove("hide");
+  if(ADMINS.includes(me.email)){
+    const c={};rows.filter(r=>r.day===today()).forEach(r=>c[r.name]=(c[r.name]||0)+1);
+    $("tl").innerHTML=Object.entries(c).map(([n,k])=>`<tr><td>${esc(n)}</td><td>${k}/${LIMIT}</td></tr>`).join("")||'<tr><td class="mu">Hôm nay chưa ai làm</td></tr>';
+    $("teacher").classList.remove("hide");
+  }
+  const used=rows.filter(r=>r.uid===me.uid&&r.day===today()).length,left=Math.max(0,LIMIT-used);
+  $("left").textContent=`Hôm nay bạn đã làm ${used}/${LIMIT} lần. Còn ${left} lần.`;
+  $("start").disabled=left===0;
+  $("start").textContent=left===0?"Hết lượt hôm nay, mai quay lại nhé":"Bắt đầu làm bài";
+}
+
+function ask(){
+  const x=QS[i];$("prog").style.width=(i/QS.length*100)+"%";$("q").textContent=(i+1)+". "+x.q;$("opts").innerHTML="";
+  x.o.forEach((t,k)=>{const b=document.createElement("button");b.className="opt";b.textContent=t;b.onclick=()=>pick(k);$("opts").appendChild(b)});
+}
+function pick(k){
+  const bs=[...$("opts").children];bs.forEach(b=>b.disabled=true);
+  bs[QS[i].a].classList.add("ok");if(k!==QS[i].a)bs[k].classList.add("no");else right++;
+  setTimeout(()=>{i++;i<QS.length?ask():finish()},700);
+}
+async function finish(){
+  const sec=Math.round((Date.now()-t0)/1000),day=today();
+  $("score").textContent=`Điểm: ${right}/${QS.length}`;$("time").textContent=`Thời gian: ${sec} giây`;view("result");
+  const n=rows.filter(r=>r.uid===me.uid&&r.day===day).length+1;
+  try{await setDoc(doc(db,"attempts",`${me.uid}_${day}_${n}`),{uid:me.uid,name:me.displayName||"Học sinh",day,score:right,sec,at:Date.now()})}
+  catch(e){$("time").textContent+=" (Lỗi lưu điểm, báo cô giáo)"}
+}
+
+$("gbtn").onclick=()=>signInWithPopup(auth,new GoogleAuthProvider()).catch(e=>alert("Không đăng nhập được: "+e.code));
+$("out").onclick=e=>{e.preventDefault();signOut(auth)};
+$("start").onclick=()=>{i=0;right=0;t0=Date.now();view("quiz");ask()};
+$("back").onclick=async()=>{await load();view("home")};
+onAuthStateChanged(auth,async u=>{
+  me=u;
+  if(!u){view("login");$("lbcard").classList.add("hide");$("teacher").classList.add("hide");return}
+  $("hello").textContent="Xin chào, "+(u.displayName||"bạn")+"!";
+  await load();view("home");
+});
+</script></main></body></html>
